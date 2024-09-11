@@ -1,0 +1,42 @@
+name: Comment on PR Based on Label
+
+# Trigger the workflow when a pull request is labeled, opened, or edited
+on:
+  pull_request:
+    types: [labeled, opened, edited]
+
+jobs:
+  label_check:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Check if the required label 'ready-for-review' is present
+    - name: Check if the label 'ready-for-review' is present
+      id: check-label
+      run: |
+        echo "Checking labels on the PR..."
+        PR_LABELS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels)
+
+        # Check if the 'ready-for-review' label is present
+        if echo "$PR_LABELS" | grep -q "ready-for-review"; then
+          echo "Label found"
+          echo "::set-output name=label_present::true"
+        else
+          echo "Label not found"
+          echo "::set-output name=label_present::false"
+        fi
+
+    # Step 2: Post a comment if the label is present
+    - name: Post comment if label is present
+      if: steps.check-label.outputs.label_present == 'true'
+      run: |
+        curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+          -d '{"body": "The label `ready-for-review` is present! Proceeding with the next steps."}'
+
+    # Optional: Skip posting a comment if the label is not present
+    - name: Skip comment if label is not present
+      if: steps.check-label.outputs.label_present == 'false'
+      run: |
+        echo "Required label not found. No comment will be posted."
